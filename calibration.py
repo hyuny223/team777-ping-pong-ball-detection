@@ -3,143 +3,150 @@ import glob
 import numpy as np
 import sys, os, time
 from matplotlib import pyplot as plt
+import json
 
-DISPLAY_IMAGE = True
+class calibrate:
+    # Chessboard Config
+    BOARD_WIDTH = 8
+    BOARD_HEIGHT = 6
+    SQUARE_SIZE = 0.026
 
-# Get Image Path List
-image_path_list = glob.glob("Find Homography/images/*.jpg")
+    DISPLAY_IMAGE = True
+    INTRINSIC_DIR = "images_past/"
+    MATRIX_FILE_NAME = "camera_matrix.json"
+    PINGPONG_IMG_DIR = "output_pingpong/"
+    UNDISTORTED_IMG_DIR = "undistorted/"
 
-# Chessboard Config
-BOARD_WIDTH = 9
-BOARD_HEIGHT = 6
-SQUARE_SIZE = 0.025
+    def __init__(self):
+        pass
 
-# Window-name Config
-window_name = "Intrinsic Calibration"
-cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    def get_camera_matrix(self):
+        if os.path.isfile(self.MATRIX_FILE_NAME):
+            # print("hi")
+            with open(self.MATRIX_FILE_NAME, "r") as f:
+                matrix_info = json.load(f)
+                camera_matrix = np.array(matrix_info["cam_intrinsic"], dtype=np.float32)
+                ret = matrix_info["ret"]
+                dist_coeffs = np.array(matrix_info["dist_coeffs"], dtype=np.float32)
+                rvecs = matrix_info["rvecs"]
+                tvecs = matrix_info["tvecs"]
+                #print(camera_matrix)
+                return ret, camera_matrix,  dist_coeffs, rvecs, tvecs
+        else:
+            return self.calculate_camera_matrix()
+    def calculate_camera_matrix(self):
+        # Get Image Path List
+        image_path_list = sorted(glob.glob(self.INTRINSIC_DIR+"*.png"))
 
-# Calibration Config
-flags = (
-    cv2.CALIB_CB_ADAPTIVE_THRESH
-    + cv2.CALIB_CB_NORMALIZE_IMAGE
-    + cv2.CALIB_CB_FAST_CHECK
-)
-pattern_size = (BOARD_WIDTH, BOARD_HEIGHT)
-counter = 0
+        
 
-image_points = list()
+        # Window-name Config
+        window_name = "Intrinsic Calibration"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
-for image_path in image_path_list:
-    image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    # OpneCV Color Space -> BGR
-    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Calibration Config
+        flags = (
+            cv2.CALIB_CB_ADAPTIVE_THRESH
+            + cv2.CALIB_CB_NORMALIZE_IMAGE
+            + cv2.CALIB_CB_FAST_CHECK
+        )
+        pattern_size = (self.BOARD_WIDTH, self.BOARD_HEIGHT)
+        counter = 0
 
-    ret, corners = cv2.findChessboardCorners(image_gray, pattern_size, flags)
-    if ret == True:
-        if DISPLAY_IMAGE:
-            image_draw = cv2.drawChessboardCorners(image, pattern_size, corners, ret)
-            for corner in corners:
-                counter_text = str(counter)
-                point = (int(corner[0][0]), int(corner[0][1]))
-                cv2.putText(image_draw, counter_text, point, 2, 0.5, (0, 0, 255), 1)
-                counter += 1
+        image_points = list()
 
-            counter = 0
-            # cv2.imshow(window_name, image_draw)
-            # cv2.waitKey(0)
+        for image_path in image_path_list:
+            image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            # OpneCV Color Space -> BGR
+            image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        image_points.append(corners)
+            ret, corners = cv2.findChessboardCorners(image_gray, pattern_size, flags)
+            if ret:
+                if self.DISPLAY_IMAGE:
+                    image_draw = cv2.drawChessboardCorners(image, pattern_size, corners, ret)
+                    for corner in corners:
+                        counter_text = str(counter)
+                        point = (int(corner[0][0]), int(corner[0][1]))
+                        cv2.putText(image_draw, counter_text, point, 2, 0.5, (0, 0, 255), 1)
+                        counter += 1
 
-object_points = list()
-# print(np.shape(image_points))
-
-# (13, 54, 1, 2)
-# (image count, featuer count, list, image_point(u, v))
-# ojbect_points
-# (13, 54, 1, 3)
-# (image count, featuer count, list, object_point(x, y, z))
-
-"""
- forward: Z
- right: Y
- down: X
-"""
-
-BOARD_WIDTH = 9
-BOARD_HEIGHT = 6
-
-for i in range(len(image_path_list)):
-    object_point = list()
-    height = 0
-    for _ in range(0, BOARD_HEIGHT):
-        # Loop Width -> 9
-        width = 0
-        for _ in range(0, BOARD_WIDTH):
-            # Loop Height -> 6
-            point = [[height, width, 0]]
-            object_point.append(point)
-            width += SQUARE_SIZE
-        height += SQUARE_SIZE
-    object_points.append(object_point)
-
-object_points = np.asarray(object_points, dtype=np.float32)
+                    counter = 0
+                    # cv2.imshow(window_name, image_draw)
+                    # cv2.waitKey(0)
+        
+                image_points.append(corners)
+            else:
+                print(image_path)
+                os.remove(image_path)
 
 
-tmp_image = cv2.imread("Find Homography/images/left01.jpg", cv2.IMREAD_ANYCOLOR)
-# print(object_points[..., 0:2].shape)
-# image_draw = cv2.drawChessboardCorners(tmp_image, pattern_size, object_points[0][...,:2], ret)
-# cv2.imshow("a", image_draw)
-# cv2.waitKey()
+        object_points = list()
 
-image_shape = np.shape(tmp_image)
-
-image_height = image_shape[0]
-image_width = image_shape[1]
-image_size = (image_width, image_height)
-# print(image_size)
-
-ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(object_points, image_points, image_size, None, None)
-# r(rotation) vecs = (26, 3, 1)
-# t(translation) vecs = (26, 3, 1)
-# print(f"camera_matrix : \n {camera_matrix}")
-# print(f"dist_coeffs : \n {dist_coeffs}")
-# print(f"rvecs : \n {np.shape(rvecs)}")
-# print(f"tvecs : \n {np.shape(tvecs)}")
-
-# print("=" * 20)
-# print(f"re-projection error\n {ret}\n")
-# print(f"camera matrix\n {camera_matrix}\n")
-# print(f"distortion coefficientes error\n {dist_coeffs}\n")
-# print(f"extrinsic for each image\n {len(rvecs)} {len(tvecs)}")
-# print("=" * 20)
-
-# start_time = time.process_time()
-# for image_path in image_path_list:
-#     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-#     image_undist = cv2.undistort(image, camera_matrix, dist_coeffs, None)
-#     # cv2.imshow("image", image)
-#     # cv2.imshow("image_undist", image_undist)
-#     # cv2.waitKey()
-# end_time = time.process_time()
-# print(end_time - start_time)
+        for i in range(len(image_path_list)):
+            object_point = list()
+            height = 0
+            for _ in range(0, self.BOARD_HEIGHT):
+                # Loop Width -> 9
+                width = 0
+                for _ in range(0, self.BOARD_WIDTH):
+                    # Loop Height -> 6
+                    point = [[height, width, 0]]
+                    object_point.append(point)
+                    width += self.SQUARE_SIZE
+                height += self.SQUARE_SIZE
+            object_points.append(object_point)
 
 
 
-"""
-위에보다 아래가 더 빠르다
-"""
-start_time = time.process_time()
-mapx, mapy = cv2.initUndistortRectifyMap(camera_matrix, dist_coeffs, None, None, image_size, cv2.CV_32FC1)
-for image_path in image_path_list:
-    image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    image_undist = cv2.remap(image, mapx, mapy, cv2.INTER_LINEAR)
-    cv2.imshow("image", image)
-    cv2.imshow("image_undist", image_undist)
-    cv2.waitKey()
-end_time = time.process_time()
-print(end_time - start_time)
+        object_points = np.asarray(object_points, dtype=np.float32)
 
-# """
-# 0, 0, 0 -> index 0
-# 0, 0.025, 0 -> index 1
-# """
+        tmp_image = cv2.imread(self.INTRINSIC_DIR+"0.png", cv2.IMREAD_ANYCOLOR)
+        image_shape = np.shape(tmp_image)
+
+        image_height = image_shape[0]
+        image_width = image_shape[1]
+        image_size = (image_width, image_height)
+        print("start calibration")
+        ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(object_points, image_points, image_size, None, None)
+
+        
+        with open(self.MATRIX_FILE_NAME, "w") as f:
+            camera_mat_dict = {}
+            camera_mat_dict["ret"] = ret
+            camera_mat_dict["cam_intrinsic"] = camera_matrix.tolist()
+            camera_mat_dict["dist_coeffs"] = dist_coeffs.tolist()
+            camera_mat_dict["rvecs"] = 0 #rvecs
+            camera_mat_dict["tvecs"] = 0 #tvecs
+            camera_matrix_json = json.dumps(camera_mat_dict)
+            f.write(camera_matrix_json)
+        return ret, camera_matrix, dist_coeffs, rvecs, tvecs
+
+        """
+        위에보다 아래가 더 빠르다
+        """
+    def undistort(self, image_path_list, camera_matrix, dist_coeffs):
+        tmp_image = cv2.imread("output_white/"+"50.png", cv2.IMREAD_ANYCOLOR)
+        image_shape = np.shape(tmp_image)
+
+        image_height = image_shape[0]
+        image_width = image_shape[1]
+        image_size = (image_width, image_height)
+        mapx, mapy = cv2.initUndistortRectifyMap(camera_matrix, dist_coeffs, None, None, image_size, cv2.CV_32FC1)
+        count = 1
+
+        for image_path in image_path_list:
+            image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            image_undist = cv2.remap(image, mapx, mapy, cv2.INTER_LINEAR)
+            file_name = self.UNDISTORTED_IMG_DIR +str(count) + ".png"
+            cv2.imwrite(file_name, image_undist)
+            count+=1
+        # cv2.imshow("image", image)
+        # cv2.imshow("image_undist", image_undist)
+        # cv2.waitKey()
+        
+### 구부러진 사진을 intrinsic matrix를 통해 펴는 작업
+cal = calibrate()
+# print(cal.get_camera_matrix())
+ret, camera_matrix, dist_coeffs, rvecs, tvecs = cal.get_camera_matrix()
+# print(cal.get_camera_matrix())
+cal.undistort(sorted(glob.glob("output_white/*.png")), camera_matrix, dist_coeffs)
