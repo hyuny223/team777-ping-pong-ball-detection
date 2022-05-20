@@ -6,34 +6,34 @@ from matplotlib import pyplot as plt
 import json
 
 class Calibrate:
-    # Chessboard Config
-    BOARD_WIDTH = 8
-    BOARD_HEIGHT = 6
-    SQUARE_SIZE = 0.026
-
-    DISPLAY_IMAGE = True
-    INTRINSIC_DIR = "images_past/"
-    MATRIX_FILE_NAME = "camera_matrix.json"
-    PINGPONG_IMG_DIR = "output_pingpong/"
-    UNDISTORTED_IMG_DIR = "undistorted/"
+    
 
     def __init__(self):
-        pass
+        # Chessboard Config
+        self.BOARD_WIDTH = 8
+        self.BOARD_HEIGHT = 6
+        self.SQUARE_SIZE = 0.026
+
+        self.DISPLAY_IMAGE = True
+        self.INTRINSIC_DIR = "images_past/"
+        self.MATRIX_FILE_NAME = "/home/nvidia/xycar_ws/src/week14/src/camera_matrix.json"
+        self.PINGPONG_IMG_DIR = "output_pingpong/"
+        self.UNDISTORTED_IMG_DIR = "undistorted/"
 
     def get_camera_matrix(self):
-        if os.path.isfile(self.MATRIX_FILE_NAME):
+        # if os.path.exists(self.MATRIX_FILE_NAME):
             # print("hi")
-            with open(self.MATRIX_FILE_NAME, "r") as f:
-                matrix_info = json.load(f)
-                camera_matrix = np.array(matrix_info["cam_intrinsic"], dtype=np.float32)
-                ret = matrix_info["ret"]
-                dist_coeffs = np.array(matrix_info["dist_coeffs"], dtype=np.float32)
-                rvecs = matrix_info["rvecs"]
-                tvecs = matrix_info["tvecs"]
-                #print(camera_matrix)
-                return ret, camera_matrix,  dist_coeffs, rvecs, tvecs
-        else:
-            return self.calculate_camera_matrix()
+        with open(self.MATRIX_FILE_NAME, "r") as f:
+            matrix_info = json.load(f)
+            camera_matrix = np.array(matrix_info["cam_intrinsic"], dtype=np.float32)
+            ret = matrix_info["ret"]
+            dist_coeffs = np.array(matrix_info["dist_coeffs"], dtype=np.float32)
+            rvecs = matrix_info["rvecs"]
+            tvecs = matrix_info["tvecs"]
+            #print(camera_matrix)
+            return ret, camera_matrix,  dist_coeffs, rvecs, tvecs
+        # else:
+        #     return self.calculate_camera_matrix()
     def calculate_camera_matrix(self):
         # Get Image Path List
         image_path_list = sorted(glob.glob(self.INTRINSIC_DIR+"*.png"))
@@ -152,10 +152,3 @@ class Calibrate:
         mapx, mapy = cv2.initUndistortRectifyMap(camera_matrix, dist_coeffs, None, None, image_size, cv2.CV_32FC1)
         frame = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
         return frame
-
-image = cv2.imread("test.png", cv2.IMREAD_COLOR)
-cv2.imshow("image", image)
-cal = Calibrate()
-dst = cal.undistort(image)
-cv2.imshow("undistorted", dst)
-cv2.waitKey()

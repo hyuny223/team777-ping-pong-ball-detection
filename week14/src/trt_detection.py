@@ -70,9 +70,10 @@ from calibration import Calibrate as Calibrator
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
 CFG = "/home/nvidia/xycar_ws/src/week14/src/yolov3-tiny_tstl_416.cfg"
-TRT = '/home/nvidia/xycar_ws/src/week14/src/model_epoch1550.trt'
+TRT = '/home/nvidia/xycar_ws/src/week14/src/model_epoch3200.trt'
+# TRT = '../src/yolov3_onnx_rt/model_epoch1850.trt'
 NUM_CLASS = 2
-# INPUT_IMG = '/home/nvidia/xycar_ws/src/yolov3_trt_ros/src/video1_2.png'
+INPUT_IMG = '/home/nvidia/xycar_ws/src/week14/detection/'
 
 bridge = CvBridge()
 xycar_image = np.empty(shape=[0])
@@ -112,7 +113,10 @@ class yolov3_trt(object):
         
         self.detection_pub = rospy.Publisher('/yolov3_trt_ros/detections', BoundingBoxes, queue_size=1)
 
+        self.calibrator = Calibrator()
+
     def detect(self):
+        global xycar_image
         rate = rospy.Rate(10)
         image_sub = rospy.Subscriber("/usb_cam/image_raw", Imageros, img_callback)
         while not rospy.is_shutdown():
@@ -129,8 +133,16 @@ class yolov3_trt(object):
             if self.show_img:
                 cv2.imshow("show_trt",xycar_image)
                 cv2.waitKey(1)
-    
-            # xycar_image = Calibrator.undistort(xycar_image)
+
+            cv2.imshow("before",xycar_image)
+            
+            xycar_image = self.calibrator.undistort(xycar_image)
+            sharpen_kernel = np.array([[0,-1,0],
+                                        [-1, 5, -1],
+                                        [0, -1, 0]])
+            xycar_image = cv2.filter2D(src=xycar_image, ddepth=-1, kernel = sharpen_kernel)
+
+
             image = self.preprocessor.process(xycar_image)
             # Store the shape of the original input image in WH format, we will need it for later
             shape_orig_WH = (image.shape[3], image.shape[2])

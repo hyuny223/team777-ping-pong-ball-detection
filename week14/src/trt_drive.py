@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 import rospy, serial, time
 from xycar_msgs.msg import xycar_motor
