@@ -3,12 +3,14 @@
 import json, rospy, os, math, sys
 import cv2
 import numpy as np
+import pandas as pd
 from week14.msg import BoundingBoxes, BoundingBox
 
 json_file_path = "/home/nvidia/xycar_ws/src/week14/src/camera_matrix_aug.json"
 
 bb = 0
 pingpong_list = []
+csv_export_list = []
 
 with open(json_file_path, "r") as json_file:
     labeling_info = json.load(json_file)
@@ -32,49 +34,6 @@ def callback(data) :
         pingpong_list.append([bb.id, bb.xmin, bb.xmax, bb.ymin, bb.ymax])
 
 
-def demoDist(plist):
-    global bb
-    global camera_matrix
-    CAMERA_HEIGHT = 16
-
-    # # distance = f * height / img(y)
-    # # ?/? ???? ??? ??? ??, ????
-    # # FOV ??? ?? -> ?/? ??? ????.
-
-    index = 0
-    for ping_bbox in plist:
-        id, xmin, xmax, ymin, ymax= ping_bbox
-
-        w = xmax - xmin
-        h = ymax - ymin
-
-        cx = (xmax + xmin) // 2
-        cy = (ymax + ymin) // 2
-
-
-        # Normalized Image Plane
-        y_norm = (ymax - camera_matrix[1][2]) / camera_matrix[1][1]
-        distance = 1 * CAMERA_HEIGHT / y_norm
-
-        if (cx >= 320):
-            azimuth = -85
-        else:
-            azimuth = 85
-
-        dz = distance * math.cos(azimuth)
-        dx = distance * math.sin(azimuth)
-
-        print(int(distance))
-        print(int(dz))
-        print(int(dx))
-        print("-------------")
-
-        # cv2.rectangle(image, (int(cx - w/2), int(cy - h/2)), (int(cx + w/2), int(cy + h/2)), (0, 0, 255), 3)
-        # cv2.putText(image, f"{int(distance)}", (int(cx - w/2), int(cy - h/2+25)), 1, 2, (255, 0, 0), 2)
-        index += 1
-
-
-
 
 def focal_length_distanc_list():
     global bb
@@ -82,8 +41,6 @@ def focal_length_distanc_list():
     global pingpong_list
     global CAMERA_HEIGHT
     global fov_x
-    adjust_y = 1
-    adjust_x = 1
 
     pingpong_distance = []
     '''
@@ -99,19 +56,20 @@ def focal_length_distanc_list():
 
         y_norm = (y2 - camera_matrix[1][2]*416.0/480) / (camera_matrix[1][1]*416.0/480)
         # y_norm = (y2 - 216*416.0/480) / (camera_matrix[1][1]*416.0/480)
-        y_distance = int(1 * CAMERA_HEIGHT / y_norm) * adjust_y
+        y_distance = int(1 * CAMERA_HEIGHT / y_norm)
         x_angle = fov_x * ((float(x1)+x2)/2-camera_matrix[0][2]*416.0/640)/416
 
-        x_distance = y_distance * math.tan(x_angle) * adjust_x
+        x_distance = y_distance * math.tan(x_angle)
+        y_distance = y_distance - 16
 
         d = int(math.sqrt(y_distance**2 + x_distance**2))
-        print(d)
+        # print(d)
         
         
         # print(x_angle)
         # print(x_distance,y_distance)
         pingpong_distance.append(
-            list(map(int, [bb.id, x_distance, y_distance])))
+            list(map(int, [x_distance, y_distance])))
 
             # cv2.rectangle(tmp, (int(cx-w/2), int(cy-h/2)),
             #               (int(cx+w/2), int(cy+h/2)), (0, 0, 255), 3)
@@ -165,7 +123,11 @@ while not rospy.is_shutdown():
     # print(distance_out(obj))
     if bb != 0:
         pingpong_distance = focal_length_distanc_list()
-        white_board = visualize_location(pingpong_distance)
+        csv_export_list.append(pingpong_distance)
+        # white_board = visualize_location(pingpong_distance)
 
         
     rate.sleep()
+
+line = pd.DataFrame(csv_export_list)
+line.to_csv('/home/nvidia/xycar_ws/src/week14/distance.csv',header=False, index=False)

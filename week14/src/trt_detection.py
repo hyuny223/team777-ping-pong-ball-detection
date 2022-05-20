@@ -48,7 +48,7 @@
 # Users Notice.
 #
 
-import sys, os
+import sys, os, glob
 import time
 import numpy as np
 import cv2
@@ -64,7 +64,8 @@ from sensor_msgs.msg import Image as Imageros
 
 from data_processing import PreprocessYOLO, PostprocessYOLO, ALL_CATEGORIES
 import common
-
+#import CSV_generator as csv_converter
+import pandas as pd
 from calibration import Calibrate as Calibrator
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
@@ -75,8 +76,11 @@ TRT = '/home/nvidia/xycar_ws/src/week14/src/model_epoch3200.trt'
 NUM_CLASS = 2
 INPUT_IMG = '/home/nvidia/xycar_ws/src/week14/detection/'
 
+INPUT_TOPIC = "/usb_cam/image_raw"
+
 bridge = CvBridge()
 xycar_image = np.empty(shape=[0])
+image_file_name = ''
 
 class yolov3_trt(object):
     def __init__(self):
@@ -117,10 +121,19 @@ class yolov3_trt(object):
 
     def detect(self):
         global xycar_image
+        global image_file_name
         rate = rospy.Rate(10)
-        image_sub = rospy.Subscriber("/usb_cam/image_raw", Imageros, img_callback)
-        while not rospy.is_shutdown():
-            rate.sleep()
+
+        img_list = glob.glob("/home/nvidia/xycar_ws/src/week14/pingpong_project/detection/score/data/*.jpg")
+        # img_list.sort()
+        line_temp = [[],[],[],[],[],[],[]]
+
+        for img in img_list:
+            xycar_image = cv2.imread(img)
+            image_file_name = img.replace("/home/nvidia/xycar_ws/src/week14/pingpong_project/distance/image/","")
+
+        # while not rospy.is_shutdown():
+        #     rate.sleep()
 
             # Do inference with TensorRT
 
@@ -130,17 +143,17 @@ class yolov3_trt(object):
             if xycar_image.shape[0] == 0:
                 continue
             
-            if self.show_img:
-                cv2.imshow("show_trt",xycar_image)
-                cv2.waitKey(1)
+            # if self.show_img:
+            #     cv2.imshow("show_trt",xycar_image)
+            #     cv2.waitKey()
 
-            cv2.imshow("before",xycar_image)
+            # cv2.imshow("before",xycar_image)
             
-            xycar_image = self.calibrator.undistort(xycar_image)
-            sharpen_kernel = np.array([[0,-1,0],
-                                        [-1, 5, -1],
-                                        [0, -1, 0]])
-            xycar_image = cv2.filter2D(src=xycar_image, ddepth=-1, kernel = sharpen_kernel)
+            # xycar_image = self.calibrator.undistort(xycar_image)
+            # sharpen_kernel = np.array([[0,-1,0],
+            #                             [-1, 5, -1],
+            #                             [0, -1, 0]])
+            # xycar_image = cv2.filter2D(src=xycar_image, ddepth=-1, kernel = sharpen_kernel)
 
 
             image = self.preprocessor.process(xycar_image)
@@ -160,8 +173,23 @@ class yolov3_trt(object):
             latency = time.time() - start_time
             fps = 1 / latency
 
+            if boxes is not None:
+                for box in boxes:
+                    minx, miny, width, height = box
+
+                    line_temp[0].append(image_file_name)
+                    line_temp[1].append('0')
+                    line_temp[2].append((minx+width/2) / 416)
+                    line_temp[3].append((miny+height/2) / 416)
+                    line_temp[4].append(width/416)
+                    line_temp[5].append(height/416)
+            
+            line=pd.DataFrame(line_temp)
+            line=line.transpose()
+            
             #publish detected objects boxes and classes
             self.publisher(boxes, scores, classes)
+
 
             # Draw the bounding boxes onto the original input image and save it as a PNG file
             # print(boxes, classes, scores)
@@ -173,11 +201,14 @@ class yolov3_trt(object):
                 cv2.putText(show_img, "FPS:"+str(int(fps)), (10,50),cv2.FONT_HERSHEY_SIMPLEX, 1,(0,255,0),2,1)
                 cv2.imshow("result",show_img)
                 cv2.waitKey(1)
+        line.to_csv('/home/nvidia/xycar_ws/src/week14/asdffas.csv',header=False, index=False)
+
 
     def _write_message(self, detection_results, boxes, scores, classes):
         """ populate output message with input header and bounding boxes information """
         if boxes is None:
-            return None
+            return None        
+
         for box, score, category in zip(boxes, scores, classes):
             # Populate darknet message
             minx, miny, width, height = box
@@ -189,6 +220,8 @@ class yolov3_trt(object):
             detection_msg.probability = score
             detection_msg.id = int(category)
             detection_results.bounding_boxes.append(detection_msg)
+
+            
         return detection_results
 
     def publisher(self, boxes, confs, classes):
