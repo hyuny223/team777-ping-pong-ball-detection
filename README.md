@@ -6,9 +6,9 @@ The goal of this project is to detect pingpong ball with YOLOv3.
 
 
 # 2. Developed Environment
-OS : ubuntu18.04 ROS melodic  
-Processor : Nvidia NX  
-Nvidia Kernel : Xavier NX Kernel  
+OS : ubuntu18.04 ROS melodic 
+Processor : Nvidia TX2
+Nvidia Kernel : Jetson TX2 Kernel
 <br>
 This program is for Xycar(RC-Car). So a "weights(model)" file is converted to tensorrt sutable for architecture of Xycar. So if you want to lighten your model to fit your hardware, you should make your own tensorrt.  
 If you don't want, just use the model(a weights file).  
