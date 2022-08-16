@@ -1,1 +1,0 @@
-# team777-ping_pong_ball_detection
